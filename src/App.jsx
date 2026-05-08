@@ -222,7 +222,6 @@ export default function SolarSystem2D() {
           display: 'block', 
           width: '100%',
           height: '100%',
-          // Updated Cursors: grabbing for pan, move (multidirectional arrows) for rotate/tilt
           cursor: dragState.isDragging && dragState.button === 0 ? 'grabbing' 
                 : dragState.isDragging && dragState.button === 2 ? 'move'
                 : 'crosshair',
