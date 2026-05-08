@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Body, MakeTime, HelioVector } from 'astronomy-engine';
 import { Button, ButtonGroup, Stack, Box, Typography } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -75,7 +75,10 @@ export default function SolarSystem2D() {
   const [rotationDeg, setRotationDeg] = useState(0); 
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(150); 
-  const [dragState, setDragState] = useState({ isDragging: false, button: null, lastX: 0, lastY: 0 });
+  
+  // Replaced dragState with a ref to track multiple simultaneous touch points smoothly
+  const activePointers = useRef({});
+  const [isDragging, setIsDragging] = useState(false);
 
   const cx = dimensions.width / 2;
   const cy = dimensions.height / 2;
@@ -108,42 +111,76 @@ export default function SolarSystem2D() {
   }, [timeDirection]);
 
   const handlePointerDown = (e) => {
-    if (e.button !== 0 && e.button !== 2) return;
-    
     e.target.setPointerCapture(e.pointerId);
-    setDragState({ 
-      isDragging: true, 
-      button: e.button, 
-      lastX: e.clientX, 
-      lastY: e.clientY 
-    });
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+    setIsDragging(true);
   };
 
   const handlePointerMove = (e) => {
-    if (!dragState.isDragging) return;
+    if (!activePointers.current[e.pointerId]) return;
 
-    const dx = e.clientX - dragState.lastX;
-    const dy = e.clientY - dragState.lastY;
+    const pointerIds = Object.keys(activePointers.current);
+    const isMouse = e.pointerType === 'mouse';
 
-    if (dragState.button === 0) {
-      // left click -> pan
-      setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-    } else if (dragState.button === 2) {
-      // right click -> rotate (dx) and tilt (dy)
-      setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
-      setTiltDeg(prev => {
-        const newTilt = prev - (dy * 0.5); 
-        return Math.max(0, Math.min(90, newTilt)); 
-      });
+    if (pointerIds.length === 1) {
+      // Single touch or mouse movement
+      const dx = e.clientX - activePointers.current[e.pointerId].x;
+      const dy = e.clientY - activePointers.current[e.pointerId].y;
+
+      if (isMouse) {
+        if (e.buttons === 1) { // Left click -> Pan
+          setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        } else if (e.buttons === 2) { // Right click -> Rotate & Tilt
+          setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
+          setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dy * 0.5))));
+        }
+      } else {
+        // Single finger touch -> Pan
+        setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      }
+    } else if (pointerIds.length === 2 && !isMouse) {
+      // Two fingers -> Pinch to Zoom + 2-Finger Drag to Rotate/Tilt
+      const p1Id = pointerIds[0];
+      const p2Id = pointerIds[1];
+      const p1 = activePointers.current[p1Id];
+      const p2 = activePointers.current[p2Id];
+
+      const prevDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      const prevCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+
+      // Temporarily update the currently moving pointer to calculate new metrics
+      activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+      
+      const newP1 = activePointers.current[p1Id];
+      const newP2 = activePointers.current[p2Id];
+
+      const newDist = Math.hypot(newP1.x - newP2.x, newP1.y - newP2.y);
+      const newCenter = { x: (newP1.x + newP2.x) / 2, y: (newP1.y + newP2.y) / 2 };
+
+      // Apply Zoom (Natural multiplier based on pinch distance ratio)
+      if (prevDist > 0) {
+        setScale(prev => Math.max(0.5, Math.min(2000, prev * (newDist / prevDist))));
+      }
+
+      // Apply Rotate & Tilt
+      const dxCenter = newCenter.x - prevCenter.x;
+      const dyCenter = newCenter.y - prevCenter.y;
+      
+      setRotationDeg(prev => (prev + (dxCenter * 0.5)) % 360);
+      setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dyCenter * 0.5))));
+      
+      return; 
     }
 
-    setDragState(prev => ({ ...prev, lastX: e.clientX, lastY: e.clientY }));
+    // Update the pointer position for the next frame
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
   };
 
   const handlePointerUp = (e) => {
-    if (dragState.isDragging) {
-      e.target.releasePointerCapture(e.pointerId);
-      setDragState({ isDragging: false, button: null, lastX: 0, lastY: 0 });
+    e.target.releasePointerCapture(e.pointerId);
+    delete activePointers.current[e.pointerId];
+    if (Object.keys(activePointers.current).length === 0) {
+      setIsDragging(false);
     }
   };
 
@@ -204,8 +241,10 @@ export default function SolarSystem2D() {
           </LocalizationProvider>
         </Stack>
 
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 3, maxWidth: 300 }}>
-          Left Drag: Pan <br/> Right Drag: Rotate & Tilt <br/> Scroll: Zoom
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 3, maxWidth: 300, lineHeight: 1.8 }}>
+          <strong>Left Drag / 1 Finger:</strong> Pan <br/> 
+          <strong>Right Drag / 2 Fingers:</strong> Rotate & Tilt <br/> 
+          <strong>Scroll / Pinch:</strong> Zoom
         </Typography>
       </Box>
 
@@ -214,6 +253,7 @@ export default function SolarSystem2D() {
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onPointerLeave={handlePointerUp}
         onWheel={handleWheel}
         onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }}
@@ -222,9 +262,7 @@ export default function SolarSystem2D() {
           display: 'block', 
           width: '100%',
           height: '100%',
-          cursor: dragState.isDragging && dragState.button === 0 ? 'grabbing' 
-                : dragState.isDragging && dragState.button === 2 ? 'move'
-                : 'crosshair',
+          cursor: isDragging ? 'grabbing' : 'crosshair',
           touchAction: 'none',
           overscrollBehavior: 'none'
         }}
