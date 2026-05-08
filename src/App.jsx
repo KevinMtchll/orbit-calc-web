@@ -111,7 +111,7 @@ export default function SolarSystem2D() {
 
   const handlePointerDown = (e) => {
     e.target.setPointerCapture(e.pointerId);
-    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY, type: e.pointerType };
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
     setIsDragging(true);
   };
 
@@ -119,52 +119,53 @@ export default function SolarSystem2D() {
     if (!activePointers.current[e.pointerId]) return;
 
     const pointerIds = Object.keys(activePointers.current);
-    const activeCount = pointerIds.length;
+    const isMouse = e.pointerType === 'mouse';
 
-    // isolate mouse controls from touch controls
-    if (e.pointerType === 'mouse') {
+    if (pointerIds.length === 1) {
       const dx = e.clientX - activePointers.current[e.pointerId].x;
       const dy = e.clientY - activePointers.current[e.pointerId].y;
 
-      if (e.buttons === 1) { // Left click -> Pan
-        setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-      } else if (e.buttons === 2) { // Right click -> Rotate & Tilt
+      if (isMouse) {
+        if (e.buttons === 1) {
+          setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        } else if (e.buttons === 2) {
+          setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
+          setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dy * 0.5))));
+        }
+      } else {
         setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
         setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dy * 0.5))));
       }
-    } else {
-      if (activeCount === 1) {
-        const dx = e.clientX - activePointers.current[e.pointerId].x;
-        const dy = e.clientY - activePointers.current[e.pointerId].y;
-        setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-        
-      } else if (activeCount === 2) {
-        const [p1Id, p2Id] = pointerIds;
-        const p1 = activePointers.current[p1Id];
-        const p2 = activePointers.current[p2Id];
+    } else if (pointerIds.length === 2 && !isMouse) {
+      const p1Id = pointerIds[0];
+      const p2Id = pointerIds[1];
+      const p1 = activePointers.current[p1Id];
+      const p2 = activePointers.current[p2Id];
 
-        const prevDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-        const prevCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+      const prevDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      const prevCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
 
-        const newP1 = p1Id === e.pointerId.toString() ? { x: e.clientX, y: e.clientY } : p1;
-        const newP2 = p2Id === e.pointerId.toString() ? { x: e.clientX, y: e.clientY } : p2;
+      activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+      
+      const newP1 = activePointers.current[p1Id];
+      const newP2 = activePointers.current[p2Id];
 
-        const newDist = Math.hypot(newP1.x - newP2.x, newP1.y - newP2.y);
-        const newCenter = { x: (newP1.x + newP2.x) / 2, y: (newP1.y + newP2.y) / 2 };
+      const newDist = Math.hypot(newP1.x - newP2.x, newP1.y - newP2.y);
+      const newCenter = { x: (newP1.x + newP2.x) / 2, y: (newP1.y + newP2.y) / 2 };
 
-        if (prevDist > 0) {
-          setScale(prev => Math.max(0.5, Math.min(2000, prev * (newDist / prevDist))));
-        }
-
-        const dxCenter = newCenter.x - prevCenter.x;
-        const dyCenter = newCenter.y - prevCenter.y;
-        
-        setRotationDeg(prev => (prev + (dxCenter * 0.5)) % 360);
-        setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dyCenter * 0.5))));
+      if (prevDist > 0) {
+        setScale(prev => Math.max(0.5, Math.min(2000, prev * (newDist / prevDist))));
       }
+
+      const dxCenter = newCenter.x - prevCenter.x;
+      const dyCenter = newCenter.y - prevCenter.y;
+      
+      setPan(prev => ({ x: prev.x + dxCenter, y: prev.y + dyCenter }));
+      
+      return; 
     }
 
-    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY, type: e.pointerType };
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
   };
 
   const handlePointerUp = (e) => {
