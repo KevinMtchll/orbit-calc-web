@@ -108,7 +108,6 @@ export default function SolarSystem2D() {
   }, [timeDirection]);
 
   const handlePointerDown = (e) => {
-    // Only capture Left (0) and Right (2) click
     if (e.button !== 0 && e.button !== 2) return;
     
     e.target.setPointerCapture(e.pointerId);
