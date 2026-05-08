@@ -76,7 +76,6 @@ export default function SolarSystem2D() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [scale, setScale] = useState(150); 
   
-  // Replaced dragState with a ref to track multiple simultaneous touch points smoothly
   const activePointers = useRef({});
   const [isDragging, setIsDragging] = useState(false);
 
@@ -112,7 +111,7 @@ export default function SolarSystem2D() {
 
   const handlePointerDown = (e) => {
     e.target.setPointerCapture(e.pointerId);
-    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY, type: e.pointerType };
     setIsDragging(true);
   };
 
@@ -120,60 +119,52 @@ export default function SolarSystem2D() {
     if (!activePointers.current[e.pointerId]) return;
 
     const pointerIds = Object.keys(activePointers.current);
-    const isMouse = e.pointerType === 'mouse';
+    const activeCount = pointerIds.length;
 
-    if (pointerIds.length === 1) {
-      // Single touch or mouse movement
+    // isolate mouse controls from touch controls
+    if (e.pointerType === 'mouse') {
       const dx = e.clientX - activePointers.current[e.pointerId].x;
       const dy = e.clientY - activePointers.current[e.pointerId].y;
 
-      if (isMouse) {
-        if (e.buttons === 1) { // Left click -> Pan
-          setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-        } else if (e.buttons === 2) { // Right click -> Rotate & Tilt
-          setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
-          setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dy * 0.5))));
-        }
-      } else {
-        // Single finger touch -> Pan
+      if (e.buttons === 1) { // Left click -> Pan
         setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      } else if (e.buttons === 2) { // Right click -> Rotate & Tilt
+        setRotationDeg(prev => (prev + (dx * 0.5)) % 360);
+        setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dy * 0.5))));
       }
-    } else if (pointerIds.length === 2 && !isMouse) {
-      // Two fingers -> Pinch to Zoom + 2-Finger Drag to Rotate/Tilt
-      const p1Id = pointerIds[0];
-      const p2Id = pointerIds[1];
-      const p1 = activePointers.current[p1Id];
-      const p2 = activePointers.current[p2Id];
+    } else {
+      if (activeCount === 1) {
+        const dx = e.clientX - activePointers.current[e.pointerId].x;
+        const dy = e.clientY - activePointers.current[e.pointerId].y;
+        setPan(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+        
+      } else if (activeCount === 2) {
+        const [p1Id, p2Id] = pointerIds;
+        const p1 = activePointers.current[p1Id];
+        const p2 = activePointers.current[p2Id];
 
-      const prevDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-      const prevCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        const prevDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        const prevCenter = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
 
-      // Temporarily update the currently moving pointer to calculate new metrics
-      activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
-      
-      const newP1 = activePointers.current[p1Id];
-      const newP2 = activePointers.current[p2Id];
+        const newP1 = p1Id === e.pointerId.toString() ? { x: e.clientX, y: e.clientY } : p1;
+        const newP2 = p2Id === e.pointerId.toString() ? { x: e.clientX, y: e.clientY } : p2;
 
-      const newDist = Math.hypot(newP1.x - newP2.x, newP1.y - newP2.y);
-      const newCenter = { x: (newP1.x + newP2.x) / 2, y: (newP1.y + newP2.y) / 2 };
+        const newDist = Math.hypot(newP1.x - newP2.x, newP1.y - newP2.y);
+        const newCenter = { x: (newP1.x + newP2.x) / 2, y: (newP1.y + newP2.y) / 2 };
 
-      // Apply Zoom (Natural multiplier based on pinch distance ratio)
-      if (prevDist > 0) {
-        setScale(prev => Math.max(0.5, Math.min(2000, prev * (newDist / prevDist))));
+        if (prevDist > 0) {
+          setScale(prev => Math.max(0.5, Math.min(2000, prev * (newDist / prevDist))));
+        }
+
+        const dxCenter = newCenter.x - prevCenter.x;
+        const dyCenter = newCenter.y - prevCenter.y;
+        
+        setRotationDeg(prev => (prev + (dxCenter * 0.5)) % 360);
+        setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dyCenter * 0.5))));
       }
-
-      // Apply Rotate & Tilt
-      const dxCenter = newCenter.x - prevCenter.x;
-      const dyCenter = newCenter.y - prevCenter.y;
-      
-      setRotationDeg(prev => (prev + (dxCenter * 0.5)) % 360);
-      setTiltDeg(prev => Math.max(0, Math.min(90, prev - (dyCenter * 0.5))));
-      
-      return; 
     }
 
-    // Update the pointer position for the next frame
-    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+    activePointers.current[e.pointerId] = { x: e.clientX, y: e.clientY, type: e.pointerType };
   };
 
   const handlePointerUp = (e) => {
@@ -242,9 +233,9 @@ export default function SolarSystem2D() {
         </Stack>
 
         <Typography variant="body2" color="text.secondary" sx={{ mt: 3, maxWidth: 300, lineHeight: 1.8 }}>
-          <strong>Left Drag / 1 Finger:</strong> Pan <br/> 
-          <strong>Right Drag / 2 Fingers:</strong> Rotate & Tilt <br/> 
-          <strong>Scroll / Pinch:</strong> Zoom
+          <strong>Left Click:</strong> Pan <br/> 
+          <strong>Right Click:</strong> Rotate & Tilt <br/> 
+          <strong>Scroll:</strong> Zoom
         </Typography>
       </Box>
 
