@@ -9,7 +9,6 @@ import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FastRewindIcon from '@mui/icons-material/FastRewind';
 
-// Viewport settings
 const width = 600;
 const height = 600;
 const cx = width / 2;
@@ -18,7 +17,6 @@ const scale = 150; // 1 AU = 150 pixels
 const TRAIL_LENGTH_DAYS = 30;
 const AHEAD_LENGTH_DAYS = 30;
 
-// Define bodies with their orbital periods (in days)
 const planets = [
   { name: 'Mercury', body: Body.Mercury, color: '#aaaaaa', radius: 3, period: 88 },
   { name: 'Venus', body: Body.Venus, color: '#e0b885', radius: 5, period: 225 },
@@ -62,12 +60,11 @@ export default function SolarSystem2D() {
     }));
   }, []);
 
-  // Effect handles movement based on timeDirection
   useEffect(() => {
     let timer;
     if (timeDirection !== 0) {
       timer = setInterval(() => {
-        // Multiply 86,400,000ms (1 day) by the direction (-1 or 1)
+        // 86,400,000ms is 1 day, multiplied by the direction (-1 or 1)
         setDate(prev => new Date(prev.getTime() + (86400000 * timeDirection))); 
       }, 50);
     }
@@ -77,7 +74,6 @@ export default function SolarSystem2D() {
   }, [timeDirection]);
 
   const handleDateChange = (newValue) => {
-    // newValue is a dayjs object provided by the picker
     if (newValue && newValue.isValid()) {
       setDate(newValue.toDate()); 
     }
@@ -144,16 +140,16 @@ export default function SolarSystem2D() {
       
       <Box sx={{ boxShadow: 5, borderRadius: '8px', overflow: 'hidden', width: '100%', maxWidth: 600 }}>
         <svg 
-          viewBox={`0 0 ${width} ${height}`} // Maintains the 600x600 internal coordinate system
+          viewBox={`0 0 ${width} ${height}`}
           style={{ 
             backgroundColor: '#0a0a0a', 
             display: 'block', 
-            width: '100%',   // Scales to fit the Box
-            height: 'auto'   // Maintains aspect ratio
+            width: '100%',
+            height: 'auto'
           }}
         >
           
-          {/* Static Background Orbit Lines */}
+          // orbit lines
           {orbitPaths.map(({ name, path }) => (
             <path 
               key={`${name}-orbit`} 
@@ -164,12 +160,11 @@ export default function SolarSystem2D() {
             />
           ))}
 
-          {/* The Sun */}
+          // Sun
           <circle cx={cx} cy={cy} r={12} fill="#ffcc00" />
           
-          {/* Planets & Trails */}
+          // planets and trails
           {planets.map(({ name, body, color, radius }) => {
-            // Current position
             const vec = HelioVector(body, time);
             const x = cx + (vec.x * scale);
             const y = cy - (vec.y * scale); 
@@ -219,7 +214,6 @@ export default function SolarSystem2D() {
               <g key={name}>
                 {trails}
                 {ahead}
-                {/* Render planet and label */}
                 <circle cx={x} cy={y} r={radius} fill={color} />
                 <text x={x + 10} y={y + 4} fill="white" fontSize="10">{name}</text>
               </g>
